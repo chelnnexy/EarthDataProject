@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Map with Image Overlay</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        #map {
+            height: 400px;
+        }
+
+        #controls {
+            padding: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="controls">
+        <label for="overlayInput">Select Image Overlay:</label>
+        <input type="file" id="overlayInput" accept=".tif" />
+    </div>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        var map = L.map('map').setView([0, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        var overlay;
+
+        document.getElementById("overlayInput").addEventListener("change", function() {
+            var filename = this.files[0].name;
+            fetch('http://127.0.0.1:5000/get-boundaries')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch boundaries from server');
+                    }
+                    return response.json();
+                })
+                .then(boundaries => {
+                    var imageBounds = boundaries[filename];
+                    if (!imageBounds) {
+                        throw new Error("No boundaries found for the selected image.");
+                    }
+
+                    // Reformat the boundaries
+                    var formattedBounds = [
+                        [imageBounds[1], imageBounds[0]],  // [south, west]
+                        [imageBounds[3], imageBounds[2]]   // [north, east]
+                    ];
+                    console.log("Formatted image bounds:", formattedBounds);
+                    
+                    if (overlay) {
+                        map.removeLayer(overlay);
+                    }
+                    overlay = L.imageOverlay(`http://127.0.0.1:5000/get-image/${filename}`, formattedBounds);
+                    overlay.addTo(map);
+                })
+                .catch(error => {
+                    console.error("Error:", error.message);
+                });
+        });
+    </script>
+</body>
+
+</html>
