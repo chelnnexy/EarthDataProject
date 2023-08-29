@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Map with Image Overlay</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Loading Leaflet CSS and GeoTIFF libraries for mapping and image handling -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/geotiff/dist-browser/geotiff.js"></script>
+
+    <style>
+        /* Styling for the map container */
+        #map {
+            height: 500px;
+            width: 100%;
+        }
+
+        /* Styling for the control section where file input is located */
+        #controls {
+            padding: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Control section for file input -->
+    <div id="controls">
+        <label for="fileInput">Select Image Overlay:</label>
+        <input type="file" id="fileInput" accept=".tif" />
+    </div>
+
+    <!-- Map container -->
+    <div id="map"></div>
+
+    <script>
+        // Initializing the map centered at [0, 0] with zoom level 2
+        const map = L.map('map').setView([0, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); // Adding the OpenStreetMap tile layer
+
+        // Handling the file input change event
+        const fileInput = document.getElementById('fileInput');
+        fileInput.addEventListener('change', async(event) => {
+            const file = event.target.files[0]; // Get the selected file
+            const arrayBuffer = await file.arrayBuffer(); // Read the file into an ArrayBuffer
+
+            // Using GeoTIFF library to handle the .tif file
+            const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
+            const image = await tiff.getImage();
+
+            const rasterData = await image.readRasters(); // Extracting raster data from the image
+            const dataURL = await createDataURL(rasterData, image.getWidth(), image.getHeight());
+
+            // Setting the bounds for the image overlay
+            const topLeft = [-85.0446, -180.0];
+            const bottomRight = [85.0592, 179.9999];
+            const overlay = L.imageOverlay(dataURL, [topLeft, bottomRight]); // Creating an image overlay
+            overlay.addTo(map); // Adding the overlay to the map
+            map.fitBounds([topLeft, bottomRight]); // Adjusting the map view to fit the overlay
+        });
+
+        // Function to create a data URL from raster data
+        async function createDataURL(data, width, height) {
+            const canvas = document.createElement('canvas'); // Create a canvas element
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext('2d');
+            const imageData = context.createImageData(width, height);
+
+            const dataArray = data[0];
+            const normalized = new Uint8ClampedArray(dataArray.length);
+
+            // Constants for normalization
+            const nodata = -9999.0;
+            const validMax = 9.91;
+            const validMin = 0;
+            const scale = 255 / (validMax - validMin);
+
+            // Normalize the data array and create image data
+            for (let i = 0; i < dataArray.length; i++) {
+                if (dataArray[i] === nodata) {
+                    normalized[i] = 0;
+                    imageData.data[i * 4 + 3] = 0; // Make this pixel transparent
+                } else {
+                    normalized[i] = (dataArray[i] - validMin) * scale;
+                    imageData.data[i * 4 + 3] = 255; // Make this pixel opaque
+                }
+                imageData.data[i * 4] = normalized[i];
+                imageData.data[i * 4 + 1] = normalized[i];
+                imageData.data[i * 4 + 2] = normalized[i];
+            }
+
+            context.putImageData(imageData, 0, 0); // Put the image data onto the canvas
+            return canvas.toDataURL(); // Return the data URL of the canvas content
+        }
+    </script>
+</body>
+
+</html>
